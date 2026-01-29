@@ -1,4 +1,6 @@
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_timer.h>
 #include <cstdlib>
 #include <cstdio>
 #include <cstdint>
@@ -10,10 +12,12 @@ constexpr int WINDOW_HEIGHT = 1024;
 constexpr int CENTER_X = WINDOW_WIDTH / 2;
 constexpr int CENTER_Y = WINDOW_HEIGHT / 2;
 
-constexpr float MOUSE_SENSITIVITY = 0.003f;
-constexpr float CAMERA_SPEED = 0.05f;
-
 constexpr float NEAR_PLANE = 0.1f;
+
+constexpr float MOUSE_SENSITIVITY = 0.003f;
+constexpr float CAMERA_SPEED = 3.0f;
+
+constexpr float CUBE_ROTATION_SPEED = 1.2f;
 constexpr float CUBE_FOV = 400.0f;
 
 struct Vec3 {
@@ -128,17 +132,59 @@ void draw_cube(const Camera& camera, std::vector<uint32_t> &pixels, float angle)
     }
 }
 
+static void move_camera(Camera& camera, float dt) {
+    float xrel, yrel;
+    SDL_GetRelativeMouseState(&xrel, &yrel);
+
+    camera.yaw   -= xrel * MOUSE_SENSITIVITY;
+    camera.pitch -= yrel * MOUSE_SENSITIVITY;
+
+    if (camera.pitch > 1.5f) camera.pitch = 1.5f;
+    if (camera.pitch < -1.5f) camera.pitch = -1.5f;
+
+    float move_step = CAMERA_SPEED * dt;
+
+    float forward_x = -std::sin(camera.yaw) * std::cos(camera.pitch) * move_step;
+    float forward_y = -std::sin(camera.pitch) * move_step;
+    float forward_z =  std::cos(camera.yaw) * std::cos(camera.pitch) * move_step;
+    float right_x   =  std::cos(camera.yaw) * move_step;
+    float right_z   =  std::sin(camera.yaw) * move_step;
+
+    const bool* keys = SDL_GetKeyboardState(nullptr);
+
+    if (keys[SDL_SCANCODE_W]) {
+        camera.position.x += forward_x;
+        camera.position.y += forward_y;
+        camera.position.z += forward_z;
+    }
+    if (keys[SDL_SCANCODE_S]) {
+        camera.position.x -= forward_x;
+        camera.position.y -= forward_y;
+        camera.position.z -= forward_z;
+    }
+    if (keys[SDL_SCANCODE_A]) {
+        camera.position.x -= right_x;
+        camera.position.z -= right_z;
+    }
+    if (keys[SDL_SCANCODE_D]) {
+        camera.position.x += right_x;
+        camera.position.z += right_z;
+    }
+    if (keys[SDL_SCANCODE_SPACE])  camera.position.y -= move_step;
+    if (keys[SDL_SCANCODE_LSHIFT]) camera.position.y += move_step;
+}
+
 int main() {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "[ERROR] SDL_Init failed: %s\n", SDL_GetError());
-        return 1;
+        return EXIT_FAILURE;
     }
 
     SDL_Window* window = SDL_CreateWindow("Hello 3D Graphics!", WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE);
     if (!window) {
         fprintf(stderr, "[ERROR] SDL_CreateWindow failed: %s\n", SDL_GetError());
         SDL_Quit();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
@@ -146,14 +192,14 @@ int main() {
         fprintf(stderr, "[ERROR] SDL_CreateRenderer failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
         SDL_Quit();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     if (!SDL_SetRenderVSync(renderer, 1)) {
         fprintf(stderr, "[ERROR] SDL_SetRenderVSync failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
         SDL_Quit();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -162,7 +208,7 @@ int main() {
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     if (!SDL_SetWindowRelativeMouseMode(window, true)) {
@@ -170,7 +216,7 @@ int main() {
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     Camera camera;
@@ -178,8 +224,15 @@ int main() {
     bool running = true;
     SDL_Event event;
     std::vector<uint32_t> pixels(WINDOW_WIDTH * WINDOW_HEIGHT, 0);
+    Uint64 last_time = SDL_GetPerformanceCounter();
+    Uint64 frequency = SDL_GetPerformanceFrequency();
 
     while (running) {
+        /* Calculate Delta Time */
+        Uint64 current_time = SDL_GetPerformanceCounter();
+        float dt = static_cast<float>(current_time - last_time) / frequency;
+        last_time = current_time;
+
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 running = false;
@@ -190,53 +243,10 @@ int main() {
             }
         }
 
-        float xrel, yrel;
-        SDL_GetRelativeMouseState(&xrel, &yrel);
-
-        camera.yaw   -= xrel * MOUSE_SENSITIVITY;
-        camera.pitch -= yrel * MOUSE_SENSITIVITY;
-
-        if (camera.pitch > 1.5f) camera.pitch = 1.5f;
-        if (camera.pitch < -1.5f) camera.pitch = -1.5f;
-
-        float forward_x = -std::sin(camera.yaw) * std::cos(camera.pitch) * CAMERA_SPEED;
-        float forward_y = -std::sin(camera.pitch) * CAMERA_SPEED;
-        float forward_z =  std::cos(camera.yaw) * std::cos(camera.pitch) * CAMERA_SPEED;
-
-        float right_x   =  std::cos(camera.yaw) * CAMERA_SPEED;
-        float right_z   =  std::sin(camera.yaw) * CAMERA_SPEED;
-
-        const bool* keys = SDL_GetKeyboardState(nullptr);
-
-        if (keys[SDL_SCANCODE_W]) {
-            camera.position.x += forward_x;
-            camera.position.y += forward_y;
-            camera.position.z += forward_z;
-        }
-
-        if (keys[SDL_SCANCODE_S]) {
-            camera.position.x -= forward_x;
-            camera.position.y -= forward_y;
-            camera.position.z -= forward_z;
-        }
-
-        if (keys[SDL_SCANCODE_A]){
-            camera.position.x -= right_x;
-            camera.position.z -= right_z;
-        } 
-
-        if (keys[SDL_SCANCODE_D]) {
-            camera.position.x += right_x;
-            camera.position.z += right_z;
-        }
-
-        if (keys[SDL_SCANCODE_SPACE])  camera.position.y -= CAMERA_SPEED;
-        if (keys[SDL_SCANCODE_LSHIFT]) camera.position.y += CAMERA_SPEED;
-
-        std::fill(pixels.begin(), pixels.end(), 0xFF000000); // Clear to Black
-
+        move_camera(camera, dt);
+        std::fill(pixels.begin(), pixels.end(), 0xFF000000); /* Clear screen */
         draw_cube(camera, pixels, cube_angle);
-        cube_angle += 0.02f;
+        cube_angle += CUBE_ROTATION_SPEED * dt;
 
         SDL_UpdateTexture(texture, nullptr, pixels.data(), WINDOW_WIDTH * sizeof(uint32_t));
         SDL_RenderTexture(renderer, texture, nullptr, nullptr);
