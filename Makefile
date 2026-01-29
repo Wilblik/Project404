@@ -1,7 +1,7 @@
 OBJ_DIR = obj
 BIN_DIR = bin
 
-TARGET = $(BIN_DIR)/3DMagic
+TARGET = $(BIN_DIR)/Project404
 OS ?= linux
 
 SRCS = main.cpp
@@ -29,6 +29,9 @@ $(TARGET): $(OBJS) | $(BIN_DIR)
 
 $(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+run: all
+	./$(TARGET)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
