@@ -4,12 +4,13 @@ BIN_DIR = bin
 TARGET = $(BIN_DIR)/Project404
 OS ?= linux
 
-SRCS = main.cpp
+SRCS = main.cpp engine.cpp
 OBJS = $(SRCS:%.cpp=$(OBJ_DIR)/%.o)
+DEPS = $(OBJS:%.o=%.d)
 
 CXX = g++
 PKG_CONFIG = pkg-config
-CXXFLAGS = -Wall -Wextra -std=c++23 `$(PKG_CONFIG) --cflags sdl3`
+CXXFLAGS = -Wall -Wextra -std=c++23 -MMD -MP `$(PKG_CONFIG) --cflags sdl3`
 LDFLAGS  = `$(PKG_CONFIG) --libs sdl3`
 
 ifeq ($(OS), win)
@@ -30,10 +31,12 @@ $(TARGET): $(OBJS) | $(BIN_DIR)
 $(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+-include $(DEPS)
+
 run: all
 	./$(TARGET)
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
-.PHONY: all clean
+.PHONY: all clean run
