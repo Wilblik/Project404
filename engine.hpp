@@ -21,6 +21,10 @@ struct Vec3 {
     float x, y, z;
 };
 
+struct Tri {
+    int v0, v1, v2;
+};
+
 struct Camera {
     Vec3 position = { 0.0f, 0.0f, 0.0f };
     float yaw = 0.0f;
@@ -38,6 +42,8 @@ void rotate_y(float& x, float& z, float angle);
 
 void put_pixel(Window& window, int x, int y, uint32_t color);
 void draw_line(Window& window, int x0, int y0, int x1, int y1, uint32_t color);
-void draw_cube(Window& window, const Camera& camera, float angle);
+void draw_filled_triangle(Window &window, int x0, int y0, int x1, int y1, int x2, int y2, uint32_t color);
+void draw_wireframe_cube(Window& window, const Camera& camera, float angle, uint32_t color);
+void draw_filled_cube(Window& window, const Camera& camera, float angle, uint32_t color);
 
 void move_camera(Camera& camera, float dt);

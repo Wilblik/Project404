@@ -1,10 +1,6 @@
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_error.h>
-#include <SDL3/SDL_stdinc.h>
-#include <SDL3/SDL_timer.h>
 #include <cstdlib>
 #include <cstdio>
-#include <cstdint>
 
 #include "engine.hpp"
 
@@ -82,6 +78,7 @@ int main() {
 
     bool running = true;
     while (running) {
+
         /* Calculate Delta Time */
         Uint64 current_time = SDL_GetPerformanceCounter();
         float dt = static_cast<float>(current_time - last_time) / frequency;
@@ -98,10 +95,9 @@ int main() {
         }
 
         move_camera(camera, dt);
-
-        std::fill(window.pixels.begin(), window.pixels.end(), 0xFF000000); /* Clear screen */
-        draw_cube(window, camera, cube_angle);
-
+        std::fill(window.pixels.begin(), window.pixels.end(), 0xFF000000);
+        draw_wireframe_cube(window, camera, cube_angle, 0xFF0000FF);
+        draw_filled_cube(window, camera, cube_angle, 0xFFFF0000);
         cube_angle += CUBE_ROTATION_SPEED * dt;
 
         if (!SDL_UpdateTexture(sdl_texture, nullptr, window.pixels.data(), window.width * sizeof(uint32_t))) {
@@ -122,5 +118,5 @@ int main() {
     SDL_DestroyWindow(sdl_window);
     SDL_Quit();
 
-    return 0;
+    return EXIT_SUCCESS;
 }

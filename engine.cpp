@@ -1,8 +1,8 @@
 #include "engine.hpp"
 
 #include <SDL3/SDL.h>
-#include <cstdint>
 #include <cmath>
+#include <array>
 
 void rotate_x(float& y, float& z, float angle) {
     float cos_a = std::cos(angle);
@@ -54,49 +54,155 @@ void draw_line(Window& window, int x0, int y0, int x1, int y1, uint32_t color) {
     }
 }
 
-void draw_cube(Window& window, const Camera& camera, float angle) {
-    std::vector<Vec3> cube_points = {
-        {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, // Front Face (0-3)
-        {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}   // Back Face  (4-7)
-    };
+void draw_filled_triangle(Window &window, int x0, int y0, int x1, int y1,
+                          int x2, int y2, uint32_t color)
+{
+    if (y0 > y1) { std::swap(x0, x1); std::swap(y0, y1); }
+    if (y0 > y2) { std::swap(x0, x2); std::swap(y0, y2); }
+    if (y1 > y2) { std::swap(x1, x2); std::swap(y1, y2); }
 
-    std::vector<std::pair<int, int>> cube_connections = {
+    int total_height = y2 - y0;
+    if (total_height == 0) return; /* Broken triangle */
+
+    for (int i = 0; i < total_height; ++i) {
+        bool second_half = i > y1 - y0 || y1 == y0;
+        int segment_height = second_half ? y2 - y1 : y1 - y0;
+
+        float alpha = (float)i / total_height;
+        float beta  = (float)(i - (second_half ? y1 - y0 : 0)) / segment_height;
+
+        int A_x = x0 + (x2 - x0) * alpha;
+        int B_x = second_half ? x1 + (x2 - x1) * beta : x0 + (x1 - x0) * beta;
+
+        if (A_x > B_x) std::swap(A_x, B_x);
+
+        for (int j = A_x; j <= B_x; j++) {
+            put_pixel(window, j, y0 + i, color);
+        }
+    }
+}
+
+
+void draw_wireframe_cube(Window& window, const Camera& camera, float angle, uint32_t color) {
+    static std::array<Vec3, 8> cube_points = {{
+        {-2, -2, -2}, {2, -2, -2}, {2, 2, -2}, {-2, 2, -2}, // Front Face (0-3)
+        {-2, -2, 2},  {2, -2, 2},  {2, 2, 2},  {-2, 2, 2}   // Back Face  (4-7)
+    }};
+
+    static std::array<std::pair<int, int>, 12> cube_connections = {{
         {0, 1}, {1, 2}, {2, 3}, {3, 0}, // Front Face square
         {4, 5}, {5, 6}, {6, 7}, {7, 4}, // Back Face square
         {0, 4}, {1, 5}, {2, 6}, {3, 7}  // Connecting the two faces
-    };
+    }};
 
     std::vector<Point> projected_points;
 
     for (const auto& p : cube_points) {
-        float cube_x = p.x;
-        float cube_y = p.y;
-        float cube_z = p.z;
-        rotate_y(cube_x, cube_z, angle);
-        cube_z += 5.0f;
+        float x = p.x;
+        float y = p.y;
+        float z = p.z;
 
-        float x_view = cube_x - camera.position.x;
-        float y_view = cube_y - camera.position.y;
-        float z_view = cube_z - camera.position.z;
-        rotate_y(x_view, z_view, -camera.yaw);
-        rotate_x(y_view, z_view, -camera.pitch);
+        rotate_y(x, z, angle);
+        z += 5.0f;
 
-        if (z_view <= NEAR_PLANE){
+        x -= camera.position.x;
+        y -= camera.position.y;
+        z -= camera.position.z;
+
+        rotate_y(x, z, -camera.yaw);
+        rotate_x(y, z, -camera.pitch);
+
+        if (z < NEAR_PLANE) {
             projected_points.push_back({0, 0, false});
             continue;
         };
 
-        float x_proj = (x_view / z_view) * CUBE_FOV + window.width / 2 ;
-        float y_proj = (y_view / z_view) * CUBE_FOV + window.height / 2;
-
+        float x_proj = (x / z) * CUBE_FOV + (float)window.width  / 2;
+        float y_proj = (y / z) * CUBE_FOV + (float)window.height / 2;
         projected_points.push_back({(int)std::round(x_proj), (int)std::round(y_proj), true});
     }
 
     for (const auto& conn : cube_connections) {
         auto start = projected_points[conn.first];
-        auto end   = projected_points[conn.second];
+        auto end = projected_points[conn.second];
         if (!start.visible || !end.visible) continue;
-        draw_line(window, start.x, start.y, end.x, end.y, 0xFF00FF00);
+        draw_line(window, start.x, start.y, end.x, end.y, color);
+    }
+}
+
+void draw_filled_cube(Window& window, const Camera& camera, float angle, uint32_t color) {
+    static std::array<Vec3, 8> cube_points = {{
+        {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, // Front Face (0-3)
+        {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}   // Back Face  (4-7)
+    }};
+
+    static std::array<Tri, 12> tris = {{
+        {0, 1, 2}, {0, 2, 3}, // Front
+        {5, 4, 7}, {5, 7, 6}, // Back
+        {1, 5, 6}, {1, 6, 2}, // Right
+        {4, 0, 3}, {4, 3, 7}, // Left
+        {3, 2, 6}, {3, 6, 7}, // Top
+        {4, 5, 1}, {4, 1, 0}  // Bottom
+    }};
+
+    std::array<Vec3, 8> view_points;
+
+    /* Transform vertices to view space */
+    for (size_t i = 0; i < cube_points.size(); ++i) {
+        float x = cube_points[i].x;
+        float y = cube_points[i].y;
+        float z = cube_points[i].z;
+
+        rotate_y(x, z, angle);
+        z += 5.0f;
+
+        x -= camera.position.x;
+        y -= camera.position.y;
+        z -= camera.position.z;
+
+        rotate_y(x, z, -camera.yaw);
+        rotate_x(y, z, -camera.pitch);
+
+        view_points[i] = {x, y, z};
+    }
+
+    /* Process triangles */
+    for (const auto& tri : tris) {
+        Vec3 p0 = view_points[tri.v0];
+        Vec3 p1 = view_points[tri.v1];
+        Vec3 p2 = view_points[tri.v2];
+
+        /* Back face culling */
+        float ax = p1.x - p0.x;
+        float ay = p1.y - p0.y;
+        float az = p1.z - p0.z;
+
+        float bx = p2.x - p0.x;
+        float by = p2.y - p0.y;
+        float bz = p2.z - p0.z;
+
+        float nx = ay * bz - az * by;
+        float ny = az * bx - ax * bz;
+        float nz = ax * by - ay * bx;
+
+        /* Check if face is looking away from the camera */
+        if (p0.x * nx + p0.y * ny + p0.z * nz >= 0.0f) continue;
+
+        /* Near plane clipping check */
+        if (p0.z < NEAR_PLANE || p1.z < NEAR_PLANE || p2.z < NEAR_PLANE) continue;
+
+        auto project_to_2d = [&](Vec3 v) -> Point {
+            float x_proj = (v.x / v.z) * CUBE_FOV + (float)window.width  / 2;
+            float y_proj = (v.y / v.z) * CUBE_FOV + (float)window.height / 2;
+            return {(int)std::round(x_proj), (int)std::round(y_proj), true};
+        };
+
+        Point p0_proj = project_to_2d(p0);
+        Point p1_proj = project_to_2d(p1);
+        Point p2_proj = project_to_2d(p2);
+
+        draw_filled_triangle(window, p0_proj.x, p0_proj.y, p1_proj.x,
+                             p1_proj.y, p2_proj.x, p2_proj.y, color);
     }
 }
 
